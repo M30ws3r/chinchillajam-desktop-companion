@@ -1,0 +1,59 @@
+{
+  "name": "chinchilla",
+  "appName": "친칠라잼 데스크톱 컴패니언",
+  "size": [
+    600,
+    446
+  ],
+  "anchor": "bottom-center",
+  "sprites": {
+    "idle": "idle.webp",
+    "left": [
+      "left.webp"
+    ],
+    "right": [
+      "right.webp"
+    ],
+    "fast": [
+      "fast_a.webp",
+      "fast_b.webp"
+    ],
+    "phone": "phone.webp",
+    "click": "click_heart.webp",
+    "coffee": "coffee.webp",
+    "patted": "patted.webp",
+    "patSound": "pat.wav",
+    "clickSound": "click.wav"
+  },
+  "timing": {
+    "hitMs": 90,
+    "fastSwapMs": 70,
+    "clickMs": 450,
+    "coffeeAfterMs": 10000,
+    "fastWindowMs": 1000,
+    "fastThreshold": 6,
+    "alternateResetMs": 1000,
+    "phoneEvery": 10,
+    "phoneHoldMs": 1200,
+    "patHoldMs": 1500
+  },
+  "squash": {
+    "scaleY": 0.97,
+    "ms": 60
+  },
+  "handMode": "alternate",
+  "interaction": {
+    "leftClickOnCharacter": "patted",
+    "clickElsewhere": "click",
+    "rightClickMenu": [
+      "크기 조절",
+      "종료"
+    ],
+    "resize": "drag outward = bigger, toward center = smaller"
+  },
+  "jelly": {
+    "frames": 24,
+    "frameMs": 30,
+    "formula": "amp=0.11*exp(-t/0.2); scaleY=1-amp*cos(2π·4.2·t); scaleX=1+(1-scaleY)*0.7; anchor bottom-center"
+  }
+}

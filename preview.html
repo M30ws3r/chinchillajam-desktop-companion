@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chinchilla Preview</title>
+<style>
+  :root { --bg: #f4f1ec; --fg: #333; --sub: #888; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1e1e24; --fg: #eee; --sub: #999; } }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+         font-family: system-ui, "Malgun Gothic", sans-serif;
+         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+  #stage { position: relative; width: min(600px, 92vw); aspect-ratio: 600 / 446;
+           transform-origin: 50% 100%; transition: transform 60ms ease-out; user-select: none; cursor: pointer; }
+  #stage img { position: absolute; inset: 0; width: 100%; height: 100%; visibility: hidden; pointer-events: none; }
+  #stage img.on { visibility: visible; }
+  #state { font-size: 14px; color: var(--sub); }
+  .hint { font-size: 13px; color: var(--sub); text-align: center; line-height: 1.6; padding: 0 16px; }
+  #bgtoggle { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--sub);
+              background: transparent; color: var(--fg); cursor: pointer; }
+</style>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="state">idle</div>
+  <div class="hint">아무 키나 눌러봐 — 왼발 → 오른발 → 왼발… 번갈아 (1초 쉬면 다시 왼발부터)<br>
+    초당 6타 이상 → 빠른 타이핑 · 10타마다 → 전화 · 친칠라 클릭 → 쓰담쓰담(뽀용!) · 다른 곳 클릭 → 하트(뾰롱!) · 10초 무입력 → 커피</div>
+  <button id="bgtoggle">배경 바꾸기</button>
+<script>
+const BASE = 'assets/chinchilla/';
+// file:// 에서도 열리도록 config를 인라인으로도 갖고 있음 (assets/chinchilla/config.json 과 동일)
+const FALLBACK = {"size":[600,446],"sprites":{"idle":"idle.webp","left":["left.webp"],"right":["right.webp"],"fast":["fast_a.webp","fast_b.webp"],"phone":"phone.webp","click":"click_heart.webp","coffee":"coffee.webp","patted":"patted.webp"},"timing":{"hitMs":90,"fastSwapMs":70,"clickMs":450,"coffeeAfterMs":10000,"fastWindowMs":1000,"fastThreshold":6,"alternateResetMs":1000,"phoneEvery":10,"phoneHoldMs":1200,"patHoldMs":1500},"squash":{"scaleY":0.97,"ms":60},"handMode":"alternate"};
+
+(async () => {
+  let cfg = FALLBACK;
+  try { const r = await fetch(BASE + 'config.json'); if (r.ok) cfg = await r.json(); } catch (e) {}
+
+  const stage = document.getElementById('stage'), stateEl = document.getElementById('state');
+  const S = cfg.sprites, T = cfg.timing;
+  const files = [...new Set([S.idle, ...S.left, ...S.right, ...S.fast, S.phone, S.click, S.coffee, S.patted])];
+  const el = {};
+  for (const f of files) { const i = new Image(); i.src = BASE + f; i.draggable = false; stage.appendChild(i); el[f] = i; }
+
+  let current = null, revertTimer = null, phoneTimer = null, presses = [], fastIdx = 0, leftIdx = 0, rightIdx = 0, nextLeft = true, lastPress = -1e9, count = 0, holdUntil = 0;
+  function show(f, label) {
+    if (current) el[current].classList.remove('on');
+    el[f].classList.add('on'); current = f; stateEl.textContent = label;
+  }
+  function squash() {
+    stage.style.transform = `scaleY(${cfg.squash.scaleY})`;
+    setTimeout(() => stage.style.transform = '', cfg.squash.ms);
+  }
+  function armPhone() { // 무입력 → 커피 타임
+    clearTimeout(phoneTimer);
+    phoneTimer = setTimeout(() => { if (performance.now() >= holdUntil) { clearTimeout(revertTimer); show(S.coffee, 'coffee (쉬는 중)'); } }, T.coffeeAfterMs);
+  }
+  function hit(f, label, ms) {
+    clearTimeout(revertTimer); show(f, label); squash(); armPhone();
+    revertTimer = setTimeout(() => show(S.idle, 'idle'), ms);
+  }
+
+  addEventListener('keydown', e => {
+    if (e.repeat) return;
+    const now = performance.now();
+    armPhone();
+    if (now < holdUntil) return; // 통화 중엔 잠깐 무시
+    // 잠깐 쉬었다가 다시 치면 항상 왼발부터 시작
+    if (now - lastPress > (T.alternateResetMs ?? 1000)) nextLeft = true;
+    lastPress = now;
+    presses = presses.filter(t => now - t < T.fastWindowMs); presses.push(now);
+    count++;
+    if (T.phoneEvery > 0 && count % T.phoneEvery === 0) {
+      holdUntil = now + T.phoneHoldMs;
+      hit(S.phone, `phone (${count}타째)`, T.phoneHoldMs);
+    } else if (presses.length >= T.fastThreshold) {
+      fastIdx = (fastIdx + 1) % S.fast.length;
+      hit(S.fast[fastIdx], `fast (${presses.length}타/초)`, T.hitMs + T.fastSwapMs);
+    } else if (nextLeft) {
+      leftIdx = (leftIdx + 1) % S.left.length; hit(S.left[leftIdx], 'left · ' + e.code, T.hitMs);
+    } else {
+      rightIdx = (rightIdx + 1) % S.right.length; hit(S.right[rightIdx], 'right · ' + e.code, T.hitMs);
+    }
+    nextLeft = !nextLeft;
+    if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+  });
+  addEventListener('mousedown', e => {
+    if (e.button !== 0 || e.target.id === 'bgtoggle') return;
+    armPhone();
+    if (stage.contains(e.target)) { // 친칠라 클릭 → 쓰다듬기
+      holdUntil = performance.now() + T.patHoldMs;
+      hit(S.patted, 'patted ♡ 뽀용!', T.patHoldMs);
+      try { const snd = new Audio(BASE + 'pat.wav'); snd.volume = 0.8; snd.play().catch(() => {}); } catch (err) {}
+      const kf = [];
+      for (let f = 0; f <= 24; f++) { // exe와 같은 젤리 공식
+        const t = f * 0.03, amp = 0.11 * Math.exp(-t / 0.2);
+        const sy = 1 - amp * Math.cos(2 * Math.PI * 4.2 * t), sx = 1 + (1 - sy) * 0.7;
+        kf.push({ transform: `scale(${sx}, ${sy})` });
+      }
+      stage.animate(kf, { duration: 720, easing: 'linear' });
+    } else if (performance.now() >= holdUntil) {
+      hit(S.click, 'click ♥ 뾰롱!', T.clickMs);
+      try { const snd = new Audio(BASE + 'click.wav'); snd.volume = 0.8; snd.play().catch(() => {}); } catch (err) {}
+    }
+  });
+
+  const bgs = ['', '#3a6ea5', '#2a9d58', '#ffffff', '#111111'];
+  let bi = 0;
+  document.getElementById('bgtoggle').onclick = () => { bi = (bi + 1) % bgs.length; document.body.style.background = bgs[bi]; };
+
+  show(S.idle, 'idle'); armPhone();
+})();
+</script>
+</body>
+</html>
